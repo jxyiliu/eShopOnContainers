@@ -1,79 +1,48 @@
-# Deploy to Azure Kubernetes Service
-# Build and push image to Azure Container Registry; Deploy to Azure Kubernetes Service
-# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+pool:
+  name: Azure Pipelines
+steps:
+- task: AzureResourceGroupDeployment@2
+  displayName: 'Azure Deployment:Create Azure Container Registry'
+  inputs:
+    azureSubscription: 'Visual Studio Enterprise (a535e62b-a7ce-4066-a004-6d4308347264)'
+    resourceGroupName: 'yiliueshoponcontainers-rg'
+    location: 'East US'
+    templateLocation: 'URL of the file'
+    csmFileLink: 'https://raw.githubusercontent.com/Microsoft/devops-project-samples/057f6cc268a62922d012067d069d58684e967d0a/armtemplates/kubernetes/containerRegistry-template.json'
+    overrideParameters: '-registryName "yiliueshoponcontainersacr" -registryLocation "South Central US" -registrySku "Standard"'
 
-trigger:
-- master
+- task: Docker@1
+  displayName: 'Build an image'
+  inputs:
+    azureSubscriptionEndpoint: 'Visual Studio Enterprise (a535e62b-a7ce-4066-a004-6d4308347264)'
+    azureContainerRegistry: yiliueshoponcontainersacr.azurecr.io
+    imageName: 'yiliueshoponcontainersacr.azurecr.io/yiliueshoponcontainers:$(Build.BuildId)'
 
-resources:
-- repo: self
+- task: Docker@1
+  displayName: 'Push an image'
+  inputs:
+    azureSubscriptionEndpoint: 'Visual Studio Enterprise (a535e62b-a7ce-4066-a004-6d4308347264)'
+    azureContainerRegistry: yiliueshoponcontainersacr.azurecr.io
+    command: 'Push an image'
+    imageName: 'yiliueshoponcontainersacr.azurecr.io/yiliueshoponcontainers:$(Build.BuildId)'
 
-variables:
+- task: HelmInstaller@0
+  displayName: 'Install Helm 3.*.*'
+  inputs:
+    helmVersion: 3.0.2
+    checkLatestHelmVersion: false
+    kubectlVersion: 1.10.3
+    checkLatestKubectl: false
 
-  # Container registry service connection established during pipeline creation
-  dockerRegistryServiceConnection: '1c587cba-b795-4c86-81b7-574c36931d2b'
-  imageRepository: 'jxyiliueshoponcontainers'
-  containerRegistry: 'yiliu.azurecr.io'
-  dockerfilePath: '**/Dockerfile'
-  tag: '$(Build.BuildId)'
-  imagePullSecret: 'yiliuea3f-auth'
+- task: HelmDeploy@0
+  displayName: 'helm package'
+  inputs:
+    azureSubscription: 'yiliueshoponcontainers - Azure'
+    azureResourceGroup: 'yiliueshoponcontainers-rg'
+    kubernetesCluster: yiliueshoponcontainers
+    command: package
+    chartPath: deploy/k8s/helm
+    save: false
 
-  # Agent VM image name
-  vmImageName: 'ubuntu-latest'
-  
-
-stages:
-- stage: Build
-  displayName: Build stage
-  jobs:  
-  - job: Build
-    displayName: Build
-    pool:
-      vmImage: $(vmImageName)
-    steps:
-    - task: Docker@2
-      displayName: Build and push an image to container registry
-      inputs:
-        command: buildAndPush
-        repository: $(imageRepository)
-        dockerfile: $(dockerfilePath)
-        containerRegistry: $(dockerRegistryServiceConnection)
-        tags: |
-          $(tag)
-          
-    - upload: manifests
-      artifact: manifests
-
-- stage: Deploy
-  displayName: Deploy stage
-  dependsOn: Build
-
-  jobs:
-  - deployment: Deploy
-    displayName: Deploy
-    pool:
-      vmImage: $(vmImageName)
-    environment: 'jxyiliueShopOnContainers.default'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: KubernetesManifest@0
-            displayName: Create imagePullSecret
-            inputs:
-              action: createSecret
-              secretName: $(imagePullSecret)
-              dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
-              
-          - task: KubernetesManifest@0
-            displayName: Deploy to Kubernetes cluster
-            inputs:
-              action: deploy
-              manifests: |
-                $(Pipeline.Workspace)/manifests/deployment.yml
-                $(Pipeline.Workspace)/manifests/service.yml
-              imagePullSecrets: |
-                $(imagePullSecret)
-              containers: |
-                $(containerRegistry)/$(imageRepository):$(tag)
-
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifacts: drop'
