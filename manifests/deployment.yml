@@ -1,0 +1,19 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: jxyiliueshoponcontainers 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jxyiliueshoponcontainers
+  template:
+    metadata:
+      labels:
+        app: jxyiliueshoponcontainers 
+    spec:
+      containers:
+        - name: jxyiliueshoponcontainers 
+          image: yiliu.azurecr.io/jxyiliueshoponcontainers
+          ports:
+          - containerPort: 80
