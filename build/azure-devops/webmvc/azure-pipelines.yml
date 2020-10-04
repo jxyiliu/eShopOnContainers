@@ -1,5 +1,5 @@
 variables:
-    registryEndpoint: yiliu
+    registryEndpoint: yiliuacr
 trigger:
   branches:
     include:
